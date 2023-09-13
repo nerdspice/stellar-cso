@@ -12,6 +12,7 @@ import subprocess
 import math
 import multiprocessing
 import multiprocessing.shared_memory
+import enum
 import signal
 import datetime
 import lz4.frame
@@ -41,6 +42,12 @@ SHM_CMP_SECT_NAME = 'ciso_shm_cmp_sectors'
 
 image_offset = 0
 is_redump_converted = False
+
+class XbeInfo(enum.Enum):
+	TITLE = 1
+	TITLE_ID = 2
+	TITLE_VER = 3
+	TITLE_IMG = 4
 
 def get_terminal_size(fd=sys.stdout.fileno()):
 	columns, lines = os.get_terminal_size()
@@ -157,6 +164,50 @@ def is_redump(iso_file):
 			return True
 	return False
 
+def is_redump_convert_blacklisted(iso_file, xbe_file = 'default.xbe'):
+	title_id = extract_xbe_info_from_iso(iso_file, XbeInfo.TITLE_ID, xbe_file)
+
+	# TOCA Race Driver 3
+	if title_id == 0x434D0050:
+		return True
+
+	return False
+
+def extract_xbe_info_from_iso(iso_file, what = XbeInfo.TITLE, xbe_file = 'default.xbe'):
+	xbe_offset = get_file_offset_in_iso(iso_file, xbe_file)
+	ret = None
+
+	xbe_header_size       = 0x1000
+	base_addr_offset      = 0x104
+	cert_addr_offset      = 0x118
+	cert_title_id_offset  = 0x8
+	cert_title_offset     = 0xc
+	cert_title_ver_offset = 0xac
+
+	with open(iso_file, 'rb') as f:
+		f.seek(xbe_offset)
+		header_bytes = f.read(xbe_header_size * 10)
+
+		base_addr = struct.unpack('<I', header_bytes[base_addr_offset: base_addr_offset + 4])[0]
+		cert_addr = struct.unpack('<I', header_bytes[cert_addr_offset: cert_addr_offset + 4])[0]
+
+		if what == XbeInfo.TITLE:
+			offset = cert_addr - base_addr + cert_title_offset
+			title_bytes = header_bytes[offset: offset + TITLE_MAX_LENGTH * 2]
+			ret = title_bytes.decode('utf-16-le').replace('\0', '')
+		elif what == XbeInfo.TITLE_ID:
+			offset = cert_addr - base_addr + cert_title_id_offset
+			title_id_bytes = header_bytes[offset: offset + 4]
+			ret = struct.unpack("<I", title_id_bytes)[0]
+		elif what == XbeInfo.TITLE_VER:
+			offset = cert_addr - base_addr + cert_title_ver_offset
+			title_ver_bytes = header_bytes[offset: offset + 4]
+			ret = struct.unpack("<I", title_ver_bytes)[0]
+		elif what == XbeInfo.TITLE_IMG:
+			pass
+
+	return ret
+
 def convert_to_xiso(iso_file):
 	os_name = platform.system()
 	if os_name == 'Windows':
@@ -212,6 +263,9 @@ def compress_chunk(chunk):
 			compress_chunk.inshm = multiprocessing.shared_memory.SharedMemory(name=SHM_IN_SECT_NAME)
 		if not hasattr(compress_chunk, 'cmpshm'):
 			compress_chunk.cmpshm = multiprocessing.shared_memory.SharedMemory(name=SHM_CMP_SECT_NAME)
+		if not hasattr(compress_chunk, 'empty_sect'):
+			compress_chunk.empty_sect = b"\0" * CISO_BLOCK_SIZE
+
 
 		inshm  = compress_chunk.inshm
 		cmpshm = compress_chunk.cmpshm
@@ -229,12 +283,17 @@ def compress_chunk(chunk):
 			sector_offset = sector * CISO_BLOCK_SIZE
 			raw_data = chunk_data[sector_offset: sector_offset + CISO_BLOCK_SIZE]
 
-			# Compress block
-			# Compressed data will have the gzip header on it, we strip that.
-			lz4.frame.compress_begin(lz4_context, compression_level=lz4.frame.COMPRESSIONLEVEL_MAX,
-				auto_flush=True, content_checksum=False, block_checksum=False, block_linked=False, source_size=False)
-			compressed_data = lz4.frame.compress_chunk(lz4_context, raw_data, return_bytearray=True)
-			lz4.frame.compress_flush(lz4_context)
+			if raw_data == compress_chunk.empty_sect:
+				# Compressed empty sectors are always the same
+				# It is still significantly faster than trying to compress them
+				compressed_data = b"\x12\x00\x00\x00\x1F\x00\x01\x00\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xEE\x50\x00\x00\x00\x00\x00"
+			else:
+				# Compress block
+				# Compressed data will have the gzip header on it, we strip that.
+				lz4.frame.compress_begin(lz4_context, compression_level=lz4.frame.COMPRESSIONLEVEL_MAX,
+					auto_flush=True, content_checksum=False, block_checksum=False, block_linked=False, source_size=False)
+				compressed_data = lz4.frame.compress_chunk(lz4_context, raw_data, return_bytearray=True)
+				lz4.frame.compress_flush(lz4_context)
 
 			out_bytes += compressed_data
 			compressed_size = len(compressed_data)
@@ -258,7 +317,7 @@ def compress_iso(infile):
 	start_time = datetime.datetime.now().timestamp()
 	xiso_should_rm = False
 
-	if is_redump(infile):
+	if is_redump(infile) and not is_redump_convert_blacklisted(infile):
 		print("Converting to XISO...")
 		abs_xiso_file = os.path.abspath(convert_to_xiso(infile))
 		abs_infile    = os.path.abspath(infile)
