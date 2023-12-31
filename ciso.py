@@ -32,6 +32,7 @@ CCI_HEADER_FMT  = '<LLQQLBBxx' # Little endian
 
 ENV_NAME_CISO_OUTPUT_DIR    = 'CISO_OUTPUT_DIR'
 ENV_NAME_CISO_COMPRESS_MODE = 'CISO_COMPRESS_MODE'
+ENV_NAME_CISO_ISO_ATTACHER  = 'CISO_ISO_ATTACHER'
 
 TITLE_MAX_LENGTH = 40
 CISO_SPLIT_SIZE  = 0xFFBF6000
@@ -266,16 +267,16 @@ def convert_to_xiso_win(iso_file):
 	xiso_file = out_dir + '/' + basename_split + '.xiso.iso'
 	out_iso   = out_dir + '/' + basename
 
-	extract_iso_exe = os.path.dirname(os.path.abspath(__file__)) + '/' + 'extract-xiso.exe'
+	extract_xiso_exe = os.path.dirname(os.path.abspath(__file__)) + '/' + 'extract-xiso.exe'
 
-	if not os.path.isfile(extract_iso_exe):
+	if not os.path.isfile(extract_xiso_exe):
 		return iso_file
 
 	if os.path.isfile(old_file):
 		os.remove(old_file)
 
 	cmd = (
-		extract_iso_exe,
+		extract_xiso_exe,
 		'-r',
 		'-m',
 		'-d',
@@ -742,7 +743,7 @@ def split_iso(infile):
 		for block in range(0, ciso['total_blocks']):
 			# Check if we need to split the ISO (due to FATX limitations)
 			# TODO: Determine a better value for this.
-			if write_pos > 0xFFBF6000:
+			if write_pos > CCI_SPLIT_SIZE:
 				# Create new file for the split
 				fout_2     = open(out_split_name + '.2.iso', 'wb')
 				split_fout = fout_2
@@ -1155,7 +1156,13 @@ def patch_xbe_timage_data(xbe_bytes, timage_sect_hdr_bytes, timage_raw_bytes):
 	return xbe_bytes
 
 def gen_attach_xbe(iso_file):
-	attach_xbe    = '/attach_cci.xbe' if get_compress_mode() == 'CCI' else '/attach.xbe'
+	attach_xbe    = '/attach_cso.xbe'
+	compress_mode = get_compress_mode()
+	attach_mode   = get_iso_attach_mode()
+
+	if compress_mode == 'CCI' or (compress_mode == 'ISO' and attach_mode == 'CCI'):
+		attach_xbe = '/attach_cci.xbe'
+
 	me_path       = os.path.dirname(os.path.abspath(__file__))
 	base_dir      = get_output_dir(os.path.dirname(os.path.abspath(iso_file)))
 	in_file_name  = me_path + attach_xbe
@@ -1247,6 +1254,8 @@ def gen_attach_xbe(iso_file):
 	out_bytes[title_id_offset: title_id_offset + 4] = title_id_bytes
 
 	# title version
+	title_ver_bytes = bytearray(title_ver_bytes)
+	title_ver_bytes[3] |= 0x80
 	title_ver_offset = cert_addr - base_addr + cert_title_ver_offset
 	out_bytes[title_ver_offset: title_ver_offset + 4] = title_ver_bytes
 
@@ -1264,9 +1273,14 @@ def get_output_dir(default_dir):
 	return out_dir
 
 def get_compress_mode():
-	comp_mode = os.environ.get(ENV_NAME_CISO_COMPRESS_MODE)
-	comp_mode = comp_mode if comp_mode else 'CSO'
-	return comp_mode
+	mode = os.environ.get(ENV_NAME_CISO_COMPRESS_MODE)
+	mode = mode if mode else 'CSO'
+	return mode
+
+def get_iso_attach_mode():
+	mode = os.environ.get(ENV_NAME_CISO_ISO_ATTACHER)
+	mode = mode if mode else 'CSO'
+	return mode
 
 # move output files to sub-folder
 def move_output_files(iso_file, output_name = '', len_limit = 255):
