@@ -39,4 +39,4 @@ adds several features:
 - Allows you to set an output directory via environment variable `CISO_OUPUT_DIR=<dir>`
 - Supports batch processing of multiple input files
 - Converts redumps into xiso first before compressing (Windows only, atm) except for a few games that might break otherwise (TOCA 3)
-- [Release binaries](https://github.com/nerdspice/stellar-cso/releases): Win-x64, Linux-x64_86, MacOS-x64
+- [Release binaries](https://github.com/nerdspice/stellar-cso/releases): Win-x64, Linux-x86_64, MacOS-x64
