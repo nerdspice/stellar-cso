@@ -36,7 +36,7 @@ adds several features:
 - Organizes output files into game folders
 - CCI support via environment variable `CISO_COMPRESS_MODE=CCI`
 - ISO support via environment variable `CISO_COMPRESS_MODE=ISO`
-- Allows you to set an output directory via environment variable `CISO_OUPUT_DIR=<dir>`
+- Allows you to set an output directory via environment variable `CISO_OUTPUT_DIR=<dir>`
 - Supports batch processing of multiple input files
 - Converts redumps into xiso first before compressing (Windows only, atm) except for a few games that might break otherwise (TOCA 3)
 - [Release binaries](https://github.com/nerdspice/stellar-cso/releases): Win-x64, Linux-x86_64, MacOS-x64
