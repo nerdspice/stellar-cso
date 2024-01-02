@@ -22,3 +22,21 @@ python3 ciso.py <ISO/XISO Path>
 Compression script is based on, and forked, from [https://github.com/phyber/ciso](https://github.com/phyber/ciso) under the BSD-3-Clause license.
 
 Based on ciso from [https://github.com/jamie/ciso](https://github.com/jamie/ciso).
+
+## [nerdspice](https://github.com/nerdspice/stellar-cso) fork
+adds several features:
+- Multi-processor support for faster compression
+- Improved progress bar
+- Chunked processing for more efficent processing on slower drives or over SMB
+- Generates an attacher .xbe with the following pieces of data patched in from default.xbe on the iso:
+  - Title
+  - Title ID
+  - Version
+  - Title Image
+- Organizes output files into game folders
+- CCI support via environment variable `CISO_COMPRESS_MODE=CCI`
+- ISO support via environment variable `CISO_COMPRESS_MODE=ISO`
+- Allows you to set an output directory via environment variable `CISO_OUPUT_DIR=<dir>`
+- Supports batch processing of multiple input files
+- Converts redumps into xiso first before compressing (Windows only, atm) except for a few games that might break otherwise (TOCA 3)
+- [Release binaries](https://github.com/nerdspice/stellar-cso/releases): Win-x64, Linux-x64_86, MacOS-x64
